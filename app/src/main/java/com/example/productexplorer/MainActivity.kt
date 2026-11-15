@@ -6,14 +6,19 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
@@ -32,11 +37,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.productexplorer.ui.theme.ProductExplorerTheme
 
-// ==========================================
-// DONNÉES PRODUIT - TP4
-// ==========================================
-
 data class ProductUi(
+    val id: Int,
     val title: String,
     val brand: String,
     val category: String,
@@ -51,6 +53,7 @@ data class ProductUi(
 
 fun sampleProduct(): ProductUi {
     return ProductUi(
+        id = 1,
         title = "Smartphone Toto X",
         brand = "TotoTech",
         category = "Smartphones",
@@ -66,11 +69,11 @@ fun sampleProduct(): ProductUi {
 
 fun sampleProductOutOfStock(): ProductUi {
     return ProductUi(
+        id = 2,
         title = "Casque Audio Pulse",
         brand = "SoundPeak",
         category = "Audio",
-        description = "Un casque confortable conçu pour écouter de la musique, " +
-                "suivre des cours en ligne et travailler dans de bonnes conditions.",
+        description = "Un casque confortable conçu pour écouter de la musique, suivre des cours en ligne et travailler dans de bonnes conditions.",
         price = 129.99,
         discountPercentage = 8.0,
         rating = 4.2,
@@ -80,9 +83,47 @@ fun sampleProductOutOfStock(): ProductUi {
     )
 }
 
-// ==========================================
-// MAIN ACTIVITY - TP5
-// ==========================================
+fun sampleProducts(): List<ProductUi> {
+    return listOf(
+        sampleProduct(),
+        sampleProductOutOfStock(),
+        ProductUi(
+            id = 3,
+            title = "Montre Connectée FitTime",
+            brand = "FitTime",
+            category = "Wearables",
+            description = "Une montre connectée simple pour suivre l'activité quotidienne.",
+            price = 89.99,
+            discountPercentage = 15.0,
+            rating = 4.4,
+            stock = 18,
+            warrantyInformation = "Garantie constructeur : 2 ans",
+            shippingInformation = "Livraison estimée : 2 à 4 jours ouvrés"
+        ),
+        ProductUi(
+            id = 4,
+            title = "Enceinte Mini Boom",
+            brand = "BoomSound",
+            category = "Audio",
+            description = "Une enceinte compacte pour écouter de la musique à la maison ou en déplacement.",
+            price = 59.99,
+            discountPercentage = 5.0,
+            rating = 4.1,
+            stock = 52,
+            warrantyInformation = "Garantie constructeur : 1 an",
+            shippingInformation = "Livraison estimée : 3 jours ouvrés"
+        )
+    )
+}
+
+fun sampleCategories(): List<String> {
+    return listOf(
+        "Smartphones",
+        "Audio",
+        "Wearables",
+        "Maison"
+    )
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -94,12 +135,9 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     modifier = Modifier.fillMaxSize()
                 ) { innerPadding ->
-
-                    ProductHomeScreen(
-                        featuredProduct = sampleProduct(),
-                        onFeaturedProductClick = {
-                            // Plus tard : ouvrir le détail du produit
-                        },
+                    ProductCatalogScreen(
+                        products = sampleProducts(),
+                        onProductClick = {},
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
@@ -108,9 +146,92 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// ==========================================
-// ÉCRAN D'ACCUEIL - TP5
-// ==========================================
+@Composable
+fun ProductCatalogScreen(
+    products: List<ProductUi>,
+    onProductClick: (ProductUi) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Text(
+                text = "Catalogue produits",
+                style = MaterialTheme.typography.headlineMedium
+            )
+        }
+
+        item {
+            Text(
+                text = "Explorez une sélection de produits disponibles localement.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+
+        item {
+            CategoryRow(categories = sampleCategories())
+        }
+
+        items(
+            items = products,
+            key = { product -> product.id }
+        ) { product ->
+            ProductListItem(
+                product = product,
+                onClick = {
+                    onProductClick(product)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun ProductListItem(
+    product: ProductUi,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = product.title,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = product.brand,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "${product.price} € • ★ ${product.rating}",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = onClick) {
+                Text(text = "Voir le produit")
+            }
+        }
+    }
+}
+
+@Composable
+fun CategoryRow(
+    categories: List<String>,
+    modifier: Modifier = Modifier
+) {
+    LazyRow(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(categories) { category ->
+            CategoryChip(label = category)
+        }
+    }
+}
 
 @Composable
 fun ProductHomeScreen(
@@ -124,31 +245,19 @@ fun ProductHomeScreen(
             .padding(16.dp)
     ) {
         HomeHeader()
-
         Spacer(modifier = Modifier.height(24.dp))
-
         SearchPreviewBar()
-
         Spacer(modifier = Modifier.height(24.dp))
-
         FeaturedProductSection(
             product = featuredProduct,
             onClick = onFeaturedProductClick
         )
-
         Spacer(modifier = Modifier.height(24.dp))
-
         CategoriesSection()
-
         Spacer(modifier = Modifier.height(24.dp))
-
         DailyOfferBox()
     }
 }
-
-// ==========================================
-// EN-TÊTE
-// ==========================================
 
 @Composable
 fun HomeHeader(
@@ -159,17 +268,12 @@ fun HomeHeader(
             text = "Product Explorer",
             style = MaterialTheme.typography.headlineMedium
         )
-
         Text(
             text = "Découvrez les produits du moment",
             style = MaterialTheme.typography.bodyMedium
         )
     }
 }
-
-// ==========================================
-// BARRE DE RECHERCHE VISUELLE
-// ==========================================
 
 @Composable
 fun SearchPreviewBar(
@@ -188,10 +292,6 @@ fun SearchPreviewBar(
     }
 }
 
-// ==========================================
-// PRODUIT MIS EN AVANT
-// ==========================================
-
 @Composable
 fun FeaturedProductSection(
     product: ProductUi,
@@ -203,46 +303,33 @@ fun FeaturedProductSection(
         shape = MaterialTheme.shapes.large,
         tonalElevation = 4.dp
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = "Produit mis en avant",
                 style = MaterialTheme.typography.titleMedium
             )
-
             Spacer(modifier = Modifier.height(12.dp))
-
             Text(
                 text = product.title,
                 style = MaterialTheme.typography.headlineSmall
             )
-
             Text(
                 text = product.brand,
                 style = MaterialTheme.typography.bodyMedium
             )
-
             Spacer(modifier = Modifier.height(12.dp))
-
             ProductQuickInfoRow(
                 price = product.price,
                 rating = product.rating,
                 stock = product.stock
             )
-
             Spacer(modifier = Modifier.height(12.dp))
-
             Button(onClick = onClick) {
                 Text(text = "Voir le produit")
             }
         }
     }
 }
-
-// ==========================================
-// INFORMATIONS RAPIDES DU PRODUIT
-// ==========================================
 
 @Composable
 fun ProductQuickInfoRow(
@@ -251,29 +338,21 @@ fun ProductQuickInfoRow(
     stock: Int,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth()
-    ) {
+    Row(modifier = modifier.fillMaxWidth()) {
         Text(
             text = "$price €",
             modifier = Modifier.weight(1f)
         )
-
         Text(
             text = "★ $rating",
             modifier = Modifier.weight(1f)
         )
-
         Text(
             text = "$stock en stock",
             modifier = Modifier.weight(1f)
         )
     }
 }
-
-// ==========================================
-// CATÉGORIES
-// ==========================================
 
 @Composable
 fun CategoryChip(
@@ -305,54 +384,38 @@ fun CategoriesSection(
             text = "Catégories",
             style = MaterialTheme.typography.titleMedium
         )
-
         Spacer(modifier = Modifier.height(8.dp))
-
         Row {
             CategoryChip(label = "Smartphones")
-
             Spacer(modifier = Modifier.weight(1f))
-
             CategoryChip(label = "Audio")
-
             Spacer(modifier = Modifier.weight(1f))
-
             CategoryChip(label = "Maison")
         }
     }
 }
 
-// ==========================================
-// OFFRE DU JOUR
-// ==========================================
-
 @Composable
 fun DailyOfferBox(
     modifier: Modifier = Modifier
 ) {
-    Box(
-        modifier = modifier.fillMaxWidth()
-    ) {
+    Box(modifier = modifier.fillMaxWidth()) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.large,
             tonalElevation = 2.dp
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
-            ) {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Text(
                     text = "Offre du jour",
                     style = MaterialTheme.typography.titleMedium
                 )
-
                 Text(
                     text = "Jusqu'à -20 % sur une sélection de produits",
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
         }
-
         Surface(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -372,10 +435,6 @@ fun DailyOfferBox(
     }
 }
 
-// ==========================================
-// ÉCRAN DÉTAIL PRODUIT - TP4
-// ==========================================
-
 @Composable
 fun ProductDetailScreen(
     product: ProductUi,
@@ -393,13 +452,11 @@ fun ProductDetailScreen(
                 .fillMaxWidth()
                 .padding(bottom = 16.dp)
         )
-
         ProductHeader(
             title = product.title,
             brand = product.brand,
             category = product.category
         )
-
         ProductPriceCard(
             price = product.price,
             discountPercentage = product.discountPercentage,
@@ -407,12 +464,10 @@ fun ProductDetailScreen(
                 .fillMaxWidth()
                 .padding(top = 16.dp)
         )
-
         ProductRating(
             rating = product.rating,
             modifier = Modifier.padding(top = 16.dp)
         )
-
         ProductAvailabilityCard(
             stock = product.stock,
             shippingInformation = product.shippingInformation,
@@ -420,19 +475,16 @@ fun ProductDetailScreen(
                 .fillMaxWidth()
                 .padding(top = 16.dp)
         )
-
         ProductDescription(
             description = product.description,
             modifier = Modifier.padding(top = 16.dp)
         )
-
         ProductWarrantyField(
             warrantyInformation = product.warrantyInformation,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 16.dp)
         )
-
         AddToCartButton(
             onClick = onAddToCartClick,
             modifier = Modifier
@@ -441,10 +493,6 @@ fun ProductDetailScreen(
         )
     }
 }
-
-// ==========================================
-// COMPOSANTS DÉTAIL PRODUIT - TP4
-// ==========================================
 
 @Composable
 fun ProductHeader(
@@ -458,12 +506,10 @@ fun ProductHeader(
             text = title,
             style = MaterialTheme.typography.headlineSmall
         )
-
         Text(
             text = brand,
             style = MaterialTheme.typography.titleMedium
         )
-
         Text(
             text = category,
             style = MaterialTheme.typography.bodyMedium
@@ -478,14 +524,11 @@ fun ProductPriceCard(
     modifier: Modifier = Modifier
 ) {
     Card(modifier = modifier) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = "$price €",
                 style = MaterialTheme.typography.headlineSmall
             )
-
             Text(
                 text = "Remise : $discountPercentage %",
                 style = MaterialTheme.typography.bodyMedium
@@ -518,7 +561,6 @@ fun ProductRating(
             imageVector = Icons.Default.Star,
             contentDescription = "Note du produit"
         )
-
         Text(
             text = "$rating / 5",
             modifier = Modifier.padding(start = 8.dp)
@@ -533,19 +575,15 @@ fun ProductAvailabilityCard(
     modifier: Modifier = Modifier
 ) {
     Card(modifier = modifier) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = "Disponibilité",
                 style = MaterialTheme.typography.titleMedium
             )
-
             Text(
                 text = "Stock : $stock unités",
                 style = MaterialTheme.typography.bodyMedium
             )
-
             Text(
                 text = shippingInformation,
                 style = MaterialTheme.typography.bodyMedium
@@ -564,7 +602,6 @@ fun ProductDescription(
             text = "Description",
             style = MaterialTheme.typography.titleMedium
         )
-
         Text(
             text = description,
             style = MaterialTheme.typography.bodyMedium,
@@ -602,9 +639,16 @@ fun AddToCartButton(
     }
 }
 
-// ==========================================
-// PREVIEWS - TP4 ET TP5
-// ==========================================
+@Preview(showBackground = true)
+@Composable
+fun ProductCatalogScreenPreview() {
+    ProductExplorerTheme {
+        ProductCatalogScreen(
+            products = sampleProducts(),
+            onProductClick = {}
+        )
+    }
+}
 
 @Preview(showBackground = true)
 @Composable
