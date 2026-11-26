@@ -65,3 +65,15 @@ Cette amélioration permet :
 - D'afficher un message "Aucun produit trouvé".
 - De réafficher automatiquement les produits après réinitialisation.
 - De conserver les favoris lors de la réinitialisation.
+
+### TP9 – State Hoisting
+
+#### Fonctionnalité supplémentaire : consultation des fiches produits
+
+Cette amélioration permet :
+
+- De sélectionner un produit depuis le catalogue.
+- D'afficher dynamiquement sa fiche détaillée.
+- De revenir au catalogue grâce à une flèche de retour.
+- De conserver la recherche, les filtres et les favoris
+  lors du retour au catalogue.

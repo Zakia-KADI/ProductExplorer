@@ -2,9 +2,15 @@ package com.example.productexplorer
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,14 +26,18 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -36,25 +46,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.productexplorer.ui.theme.ProductExplorerTheme
-
-import androidx.compose.ui.text.style.TextDecoration
 import java.util.Locale
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 
-import androidx.annotation.DrawableRes
-import androidx.compose.ui.layout.ContentScale
-
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.foundation.background
-import androidx.compose.ui.text.style.TextAlign
 data class ProductUi(
     val id: Int,
     val title: String,
@@ -69,6 +69,7 @@ data class ProductUi(
     val shippingInformation: String,
     @DrawableRes val imageRes: Int
 )
+
 fun sampleProduct(): ProductUi {
     return ProductUi(
         id = 1,
@@ -137,6 +138,7 @@ fun sampleProducts(): List<ProductUi> {
         )
     )
 }
+
 fun sampleCategories(): List<String> {
     return listOf(
         "Smartphones",
@@ -146,17 +148,20 @@ fun sampleCategories(): List<String> {
     )
 }
 
-// TP7 - Autonomie : changement manuel du thème
 class MainActivity : ComponentActivity() {
+
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         setContent {
             val systemDarkTheme = isSystemInDarkTheme()
+
             var darkTheme by rememberSaveable {
                 mutableStateOf(systemDarkTheme)
             }
+
             ProductExplorerTheme(darkTheme = darkTheme) {
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
@@ -179,10 +184,10 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                     }
-
                 ) { innerPadding ->
-                    ProductCatalogScreen(
+                    ProductCatalogContainer(
                         products = sampleProducts(),
+                        categories = sampleCategories(),
                         onProductClick = {},
                         modifier = Modifier.padding(innerPadding)
                     )
@@ -193,8 +198,9 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun ProductCatalogScreen(
+fun ProductCatalogContainer(
     products: List<ProductUi>,
+    categories: List<String>,
     onProductClick: (ProductUi) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -210,12 +216,12 @@ fun ProductCatalogScreen(
         mutableStateOf(listOf<Int>())
     }
 
-    fun toggleFavorite(productId: Int) {
-        favoriteProductIds = if (favoriteProductIds.contains(productId)) {
-            favoriteProductIds - productId
-        } else {
-            favoriteProductIds + productId
-        }
+    var selectedProductId by rememberSaveable {
+        mutableStateOf<Int?>(null)
+    }
+
+    val selectedProduct = products.find {
+        it.id == selectedProductId
     }
 
     val filteredProducts = remember(
@@ -236,6 +242,70 @@ fun ProductCatalogScreen(
         }
     }
 
+    fun toggleFavorite(productId: Int) {
+        favoriteProductIds = if (favoriteProductIds.contains(productId)) {
+            favoriteProductIds - productId
+        } else {
+            favoriteProductIds + productId
+        }
+    }
+
+    BackHandler(enabled = selectedProduct != null) {
+        selectedProductId = null
+    }
+
+    if (selectedProduct == null) {
+        ProductCatalogScreen(
+            products = filteredProducts,
+            categories = categories,
+            searchQuery = searchQuery,
+            onSearchQueryChange = { newValue ->
+                searchQuery = newValue
+            },
+            showOnlyInStock = showOnlyInStock,
+            onToggleStockFilter = {
+                showOnlyInStock = !showOnlyInStock
+            },
+            favoriteProductIds = favoriteProductIds,
+            onFavoriteClick = { productId ->
+                toggleFavorite(productId)
+            },
+            onResetFilters = {
+                searchQuery = ""
+                showOnlyInStock = false
+            },
+            onProductClick = { product ->
+                selectedProductId = product.id
+                onProductClick(product)
+            },
+            modifier = modifier
+        )
+    } else {
+        ProductDetailContainer(
+            product = selectedProduct,
+            onBackClick = {
+                selectedProductId = null
+            },
+            onAddToCartClick = {},
+            modifier = modifier
+        )
+    }
+}
+
+@Composable
+fun ProductCatalogScreen(
+    products: List<ProductUi>,
+    categories: List<String>,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    showOnlyInStock: Boolean,
+    onToggleStockFilter: () -> Unit,
+    favoriteProductIds: List<Int>,
+    onFavoriteClick: (Int) -> Unit,
+    onResetFilters: () -> Unit,
+    onProductClick: (ProductUi) -> Unit,
+    modifier: Modifier = Modifier
+) {
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -262,9 +332,7 @@ fun ProductCatalogScreen(
         item {
             OutlinedTextField(
                 value = searchQuery,
-                onValueChange = { newValue ->
-                    searchQuery = newValue
-                },
+                onValueChange = onSearchQueryChange,
                 label = {
                     Text(text = "Rechercher un produit")
                 },
@@ -274,9 +342,7 @@ fun ProductCatalogScreen(
 
         item {
             Button(
-                onClick = {
-                    showOnlyInStock = !showOnlyInStock
-                }
+                onClick = onToggleStockFilter
             ) {
                 Text(
                     text = if (showOnlyInStock) {
@@ -289,42 +355,113 @@ fun ProductCatalogScreen(
         }
 
         item {
-            CategoryRow(categories = sampleCategories())
+            CategoryRow(categories = categories)
         }
 
         item {
             Text(
-                text = "${filteredProducts.size} produit(s) affiché(s)",
+                text = "${products.size} produit(s) affiché(s)",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground
             )
         }
 
-        if (filteredProducts.isEmpty()) {
+        if (products.isEmpty()) {
             item {
                 EmptyProductsMessage(
-                    onResetClick = {
-                        searchQuery = ""
-                        showOnlyInStock = false
-                    }
+                    onResetClick = onResetFilters
                 )
             }
         } else {
             items(
-                items = filteredProducts,
+                items = products,
                 key = { product -> product.id }
             ) { product ->
                 ProductListItem(
                     product = product,
                     isFavorite = favoriteProductIds.contains(product.id),
                     onFavoriteClick = {
-                        toggleFavorite(product.id)
+                        onFavoriteClick(product.id)
                     },
                     onClick = {
                         onProductClick(product)
                     }
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun ProductDetailContainer(
+    product: ProductUi,
+    onBackClick: () -> Unit,
+    onAddToCartClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBackClick) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Retour au catalogue"
+                )
+            }
+
+            Text(
+                text = "Retour au catalogue",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+        }
+
+        ProductDetailScreen(
+            product = product,
+            onAddToCartClick = onAddToCartClick,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+fun EmptyProductsMessage(
+    onResetClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Aucun produit trouvé",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Essayez une autre recherche ou modifiez vos filtres.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(onClick = onResetClick) {
+            Text("Réinitialiser les filtres")
         }
     }
 }
@@ -339,6 +476,7 @@ fun ProductListItem(
 ) {
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
+
             ProductImage(
                 productTitle = product.title,
                 imageRes = product.imageRes,
@@ -413,8 +551,11 @@ fun ProductHomeScreen(
             .padding(16.dp)
     ) {
         HomeHeader()
+
         Spacer(modifier = Modifier.height(24.dp))
+
         SearchPreviewBar()
+
         Spacer(modifier = Modifier.height(24.dp))
 
         FeaturedProductSection(
@@ -492,7 +633,6 @@ fun FeaturedProductSection(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // TP6 - Autonomie : image du produit
             ProductImage(
                 productTitle = product.title,
                 imageRes = product.imageRes,
@@ -607,6 +747,7 @@ fun DailyOfferBox(
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxWidth()) {
+
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.large,
@@ -738,8 +879,6 @@ fun ProductHeader(
     }
 }
 
-// TP4 - Fonctionnalité supplémentaire
-
 @Composable
 fun ProductPriceCard(
     price: Double,
@@ -755,14 +894,22 @@ fun ProductPriceCard(
             if (discountPercentage > 0) {
 
                 Text(
-                    text = String.format(Locale.FRANCE, "%.2f €", price),
+                    text = String.format(
+                        Locale.FRANCE,
+                        "%.2f €",
+                        price
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     textDecoration = TextDecoration.LineThrough,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 Text(
-                    text = String.format(Locale.FRANCE, "%.2f €", discountedPrice),
+                    text = String.format(
+                        Locale.FRANCE,
+                        "%.2f €",
+                        discountedPrice
+                    ),
                     style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -785,7 +932,11 @@ fun ProductPriceCard(
             } else {
 
                 Text(
-                    text = String.format(Locale.FRANCE, "%.2f €", price),
+                    text = String.format(
+                        Locale.FRANCE,
+                        "%.2f €",
+                        price
+                    ),
                     style = MaterialTheme.typography.headlineSmall
                 )
 
@@ -797,6 +948,7 @@ fun ProductPriceCard(
         }
     }
 }
+
 @Composable
 fun ProductImage(
     productTitle: String,
@@ -810,12 +962,14 @@ fun ProductImage(
         modifier = modifier
     )
 }
+
 @Composable
 fun ProductRating(
     rating: Double,
     modifier: Modifier = Modifier
 ) {
     Row(modifier = modifier) {
+
         Icon(
             imageVector = Icons.Default.Star,
             contentDescription = "Note du produit"
@@ -836,6 +990,7 @@ fun ProductAvailabilityCard(
 ) {
     Card(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
+
             Text(
                 text = "Disponibilité",
                 style = MaterialTheme.typography.titleMedium
@@ -902,61 +1057,6 @@ fun AddToCartButton(
     }
 }
 
-@Preview(showBackground = true, name = "Thème clair")
-@Composable
-fun ProductCatalogScreenLightPreview() {
-    ProductExplorerTheme(darkTheme = false) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            ProductCatalogScreen(
-                products = sampleProducts(),
-                onProductClick = {}
-            )
-        }
-    }
-}
-
-@Preview(showBackground = true, name = "Thème sombre")
-@Composable
-fun ProductCatalogScreenDarkPreview() {
-    ProductExplorerTheme(darkTheme = true) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            ProductCatalogScreen(
-                products = sampleProducts(),
-                onProductClick = {}
-            )
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun ProductDetailScreenPreview() {
-    ProductExplorerTheme {
-        ProductDetailScreen(
-            product = sampleProduct(),
-            onAddToCartClick = {}
-        )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun ProductDetailScreenOutOfStockPreview() {
-    ProductExplorerTheme {
-        ProductDetailScreen(
-            product = sampleProductOutOfStock(),
-            onAddToCartClick = {}
-        )
-    }
-}
-
-// TP5 - Autonomie
 @Composable
 fun PromotionProductCard(
     product: ProductUi,
@@ -978,6 +1078,7 @@ fun PromotionProductCard(
             )
 
             Spacer(modifier = Modifier.height(8.dp))
+
             Text(
                 text = "-${product.discountPercentage} %",
                 color = MaterialTheme.colorScheme.primary,
@@ -1020,6 +1121,7 @@ fun PromotionProductCard(
         }
     }
 }
+
 @Composable
 fun PromotionsSection(
     products: List<ProductUi>,
@@ -1049,6 +1151,100 @@ fun PromotionsSection(
                     modifier = Modifier.weight(1f)
                 )
             }
+        }
+    }
+}
+
+@Preview(showBackground = true, name = "Thème clair")
+@Composable
+fun ProductCatalogScreenLightPreview() {
+    ProductExplorerTheme(darkTheme = false) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            ProductCatalogContainer(
+                products = sampleProducts(),
+                categories = sampleCategories(),
+                onProductClick = {}
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true, name = "Thème sombre")
+@Composable
+fun ProductCatalogScreenDarkPreview() {
+    ProductExplorerTheme(darkTheme = true) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            ProductCatalogContainer(
+                products = sampleProducts(),
+                categories = sampleCategories(),
+                onProductClick = {}
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true, name = "Accueil")
+@Composable
+fun ProductHomeScreenPreview() {
+    ProductExplorerTheme {
+        ProductHomeScreen(
+            featuredProduct = sampleProduct(),
+            onFeaturedProductClick = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Produit en stock")
+@Composable
+fun ProductDetailScreenPreview() {
+    ProductExplorerTheme {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            ProductDetailScreen(
+                product = sampleProduct(),
+                onAddToCartClick = {}
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true, name = "Produit en rupture")
+@Composable
+fun ProductDetailScreenOutOfStockPreview() {
+    ProductExplorerTheme {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            ProductDetailScreen(
+                product = sampleProductOutOfStock(),
+                onAddToCartClick = {}
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true, name = "Détail avec retour")
+@Composable
+fun ProductDetailContainerPreview() {
+    ProductExplorerTheme {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            ProductDetailContainer(
+                product = sampleProduct(),
+                onBackClick = {},
+                onAddToCartClick = {}
+            )
         }
     }
 }
@@ -1084,45 +1280,12 @@ fun ThemeSwitchPreview() {
                 )
             }
         ) { innerPadding ->
-            ProductCatalogScreen(
+            ProductCatalogContainer(
                 products = sampleProducts(),
+                categories = sampleCategories(),
                 onProductClick = {},
                 modifier = Modifier.padding(innerPadding)
             )
-        }
-    }
-}
-
-@Composable
-fun EmptyProductsMessage(
-    onResetClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Aucun produit trouvé",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Essayez une autre recherche ou modifiez vos filtres.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(onClick = onResetClick) {
-            Text("Réinitialiser les filtres")
         }
     }
 }
