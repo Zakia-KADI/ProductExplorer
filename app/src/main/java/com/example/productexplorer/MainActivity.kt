@@ -49,6 +49,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.annotation.DrawableRes
 import androidx.compose.ui.layout.ContentScale
 
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.background
 data class ProductUi(
     val id: Int,
     val title: String,
@@ -140,15 +145,40 @@ fun sampleCategories(): List<String> {
     )
 }
 
+// TP7 - Autonomie : changement manuel du thème
 class MainActivity : ComponentActivity() {
+    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
         setContent {
-            ProductExplorerTheme {
+            val systemDarkTheme = isSystemInDarkTheme()
+            var darkTheme by rememberSaveable {
+                mutableStateOf(systemDarkTheme)
+            }
+            ProductExplorerTheme(darkTheme = darkTheme) {
                 Scaffold(
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    topBar = {
+                        TopAppBar(
+                            title = {
+                                Text("Product Explorer")
+                            },
+                            actions = {
+                                IconButton(
+                                    onClick = {
+                                        darkTheme = !darkTheme
+                                    }
+                                ) {
+                                    Text(
+                                        text = if (darkTheme) "☀️" else "🌙",
+                                        style = MaterialTheme.typography.headlineSmall
+                                    )
+                                }
+                            }
+                        )
+                    }
+
                 ) { innerPadding ->
                     ProductCatalogScreen(
                         products = sampleProducts(),
@@ -206,21 +236,25 @@ fun ProductCatalogScreen(
     }
 
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
             Text(
                 text = "Catalogue produits",
-                style = MaterialTheme.typography.headlineMedium
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onBackground
             )
         }
 
         item {
             Text(
                 text = "Explorez une sélection de produits disponibles localement.",
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground
             )
         }
 
@@ -260,7 +294,8 @@ fun ProductCatalogScreen(
         item {
             Text(
                 text = "${filteredProducts.size} produit(s) affiché(s)",
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground
             )
         }
 
@@ -855,25 +890,35 @@ fun AddToCartButton(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, name = "Thème clair")
 @Composable
-fun ProductCatalogScreenPreview() {
-    ProductExplorerTheme {
-        ProductCatalogScreen(
-            products = sampleProducts(),
-            onProductClick = {}
-        )
+fun ProductCatalogScreenLightPreview() {
+    ProductExplorerTheme(darkTheme = false) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            ProductCatalogScreen(
+                products = sampleProducts(),
+                onProductClick = {}
+            )
+        }
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, name = "Thème sombre")
 @Composable
-fun ProductHomeScreenPreview() {
-    ProductExplorerTheme {
-        ProductHomeScreen(
-            featuredProduct = sampleProduct(),
-            onFeaturedProductClick = {}
-        )
+fun ProductCatalogScreenDarkPreview() {
+    ProductExplorerTheme(darkTheme = true) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            ProductCatalogScreen(
+                products = sampleProducts(),
+                onProductClick = {}
+            )
+        }
     }
 }
 
@@ -992,6 +1037,46 @@ fun PromotionsSection(
                     modifier = Modifier.weight(1f)
                 )
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Preview(showBackground = true, name = "Changement de thème")
+@Composable
+fun ThemeSwitchPreview() {
+    var darkTheme by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    ProductExplorerTheme(darkTheme = darkTheme) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text("Product Explorer")
+                    },
+                    actions = {
+                        IconButton(
+                            onClick = {
+                                darkTheme = !darkTheme
+                            }
+                        ) {
+                            Text(
+                                text = if (darkTheme) "☀️" else "🌙",
+                                style = MaterialTheme.typography.headlineSmall
+                            )
+                        }
+                    }
+                )
+            }
+        ) { innerPadding ->
+            ProductCatalogScreen(
+                products = sampleProducts(),
+                onProductClick = {},
+                modifier = Modifier.padding(innerPadding)
+            )
         }
     }
 }

@@ -44,3 +44,13 @@ Cette amélioration permet :
 - D'associer une image locale à chaque produit.
 - D'afficher également les images dans la section promotions.
 - De rendre le catalogue plus visuel et plus agréable à consulter.
+
+### TP7 – Personnalisation graphique
+
+#### Fonctionnalité supplémentaire : changement manuel du thème
+
+Cette fonctionnalité permet :
+
+- De basculer manuellement entre le thème clair et sombre.
+- D'adapter automatiquement les couleurs de l'interface.
+- D'afficher une lune ou un soleil selon le thème sélectionné.
