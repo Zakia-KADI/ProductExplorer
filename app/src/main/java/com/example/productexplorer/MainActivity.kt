@@ -54,6 +54,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.foundation.background
+import androidx.compose.ui.text.style.TextAlign
 data class ProductUi(
     val id: Int,
     val title: String,
@@ -299,20 +300,31 @@ fun ProductCatalogScreen(
             )
         }
 
-        items(
-            items = filteredProducts,
-            key = { product -> product.id }
-        ) { product ->
-            ProductListItem(
-                product = product,
-                isFavorite = favoriteProductIds.contains(product.id),
-                onFavoriteClick = {
-                    toggleFavorite(product.id)
-                },
-                onClick = {
-                    onProductClick(product)
-                }
-            )
+        if (filteredProducts.isEmpty()) {
+            item {
+                EmptyProductsMessage(
+                    onResetClick = {
+                        searchQuery = ""
+                        showOnlyInStock = false
+                    }
+                )
+            }
+        } else {
+            items(
+                items = filteredProducts,
+                key = { product -> product.id }
+            ) { product ->
+                ProductListItem(
+                    product = product,
+                    isFavorite = favoriteProductIds.contains(product.id),
+                    onFavoriteClick = {
+                        toggleFavorite(product.id)
+                    },
+                    onClick = {
+                        onProductClick(product)
+                    }
+                )
+            }
         }
     }
 }
@@ -1077,6 +1089,40 @@ fun ThemeSwitchPreview() {
                 onProductClick = {},
                 modifier = Modifier.padding(innerPadding)
             )
+        }
+    }
+}
+
+@Composable
+fun EmptyProductsMessage(
+    onResetClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Aucun produit trouvé",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Essayez une autre recherche ou modifiez vos filtres.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(onClick = onResetClick) {
+            Text("Réinitialiser les filtres")
         }
     }
 }

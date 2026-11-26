@@ -54,3 +54,14 @@ Cette fonctionnalité permet :
 - De basculer manuellement entre le thème clair et sombre.
 - D'adapter automatiquement les couleurs de l'interface.
 - D'afficher une lune ou un soleil selon le thème sélectionné.
+
+### TP8 – Gestion de l'état et interactions utilisateur
+
+#### Fonctionnalité supplémentaire : gestion de l'absence de résultats
+
+Cette amélioration permet :
+
+- De détecter automatiquement l'absence de résultats.
+- D'afficher un message "Aucun produit trouvé".
+- De réafficher automatiquement les produits après réinitialisation.
+- De conserver les favoris lors de la réinitialisation.
