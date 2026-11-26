@@ -21,17 +21,25 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -55,6 +63,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.productexplorer.ui.theme.ProductExplorerTheme
 import java.util.Locale
+import kotlin.math.roundToLong
 
 data class ProductUi(
     val id: Int,
@@ -70,6 +79,30 @@ data class ProductUi(
     val shippingInformation: String,
     @DrawableRes val imageRes: Int
 )
+
+data class CartItem(
+    val product: ProductUi,
+    val quantity: Int
+) {
+    val unitPriceInCents: Long
+        get() = (
+                product.price *
+                        (1 - product.discountPercentage / 100) * 100
+                ).roundToLong()
+
+    val totalPriceInCents: Long
+        get() = unitPriceInCents * quantity
+
+    val unitPrice: Double
+        get() = unitPriceInCents / 100.0
+
+    val totalPrice: Double
+        get() = totalPriceInCents / 100.0
+}
+
+fun formatPrice(price: Double): String {
+    return String.format(Locale.FRANCE, "%.2f €", price)
+}
 
 fun sampleProduct(): ProductUi {
     return ProductUi(
@@ -167,6 +200,20 @@ class ProductCatalogViewModel : ViewModel() {
     var selectedProductId by mutableStateOf<Int?>(null)
         private set
 
+    var cartItems by mutableStateOf(listOf<CartItem>())
+        private set
+
+    var showCart by mutableStateOf(false)
+        private set
+
+    val cartCount: Int
+        get() = cartItems.sumOf { it.quantity }
+
+    val cartTotal: Double
+        get() = cartItems.sumOf {
+            it.totalPriceInCents
+        } / 100.0
+
     val selectedProduct: ProductUi?
         get() = allProducts.find {
             it.id == selectedProductId
@@ -213,6 +260,83 @@ class ProductCatalogViewModel : ViewModel() {
     fun onBackClick() {
         selectedProductId = null
     }
+
+    fun getCartQuantity(productId: Int): Int {
+        return cartItems.find {
+            it.product.id == productId
+        }?.quantity ?: 0
+    }
+
+    fun onAddToCart(product: ProductUi) {
+        val currentQuantity = getCartQuantity(product.id)
+
+        if (currentQuantity >= product.stock) {
+            return
+        }
+
+        val existingItem = cartItems.find {
+            it.product.id == product.id
+        }
+
+        cartItems = if (existingItem == null) {
+            cartItems + CartItem(
+                product = product,
+                quantity = 1
+            )
+        } else {
+            cartItems.map { item ->
+                if (item.product.id == product.id) {
+                    item.copy(quantity = item.quantity + 1)
+                } else {
+                    item
+                }
+            }
+        }
+    }
+
+    fun onIncreaseQuantity(productId: Int) {
+        val product = allProducts.find {
+            it.id == productId
+        } ?: return
+
+        onAddToCart(product)
+    }
+
+    fun onDecreaseQuantity(productId: Int) {
+        val item = cartItems.find {
+            it.product.id == productId
+        } ?: return
+
+        if (item.quantity <= 1) {
+            onRemoveFromCart(productId)
+        } else {
+            cartItems = cartItems.map {
+                if (it.product.id == productId) {
+                    it.copy(quantity = it.quantity - 1)
+                } else {
+                    it
+                }
+            }
+        }
+    }
+
+    fun onRemoveFromCart(productId: Int) {
+        cartItems = cartItems.filter {
+            it.product.id != productId
+        }
+    }
+
+    fun onClearCart() {
+        cartItems = emptyList()
+    }
+
+    fun onOpenCart() {
+        showCart = true
+    }
+
+    fun onCloseCart() {
+        showCart = false
+    }
 }
 
 class MainActivity : ComponentActivity() {
@@ -229,6 +353,8 @@ class MainActivity : ComponentActivity() {
                 mutableStateOf(systemDarkTheme)
             }
 
+            val catalogViewModel: ProductCatalogViewModel = viewModel()
+
             ProductExplorerTheme(darkTheme = darkTheme) {
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
@@ -238,6 +364,27 @@ class MainActivity : ComponentActivity() {
                                 Text("Product Explorer")
                             },
                             actions = {
+                                IconButton(
+                                    onClick = catalogViewModel::onOpenCart
+                                ) {
+                                    BadgedBox(
+                                        badge = {
+                                            if (catalogViewModel.cartCount > 0) {
+                                                Badge {
+                                                    Text(
+                                                        catalogViewModel.cartCount.toString()
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ShoppingCart,
+                                            contentDescription = "Ouvrir le panier"
+                                        )
+                                    }
+                                }
+
                                 IconButton(
                                     onClick = {
                                         darkTheme = !darkTheme
@@ -254,7 +401,8 @@ class MainActivity : ComponentActivity() {
                 ) { innerPadding ->
                     ProductCatalogContainer(
                         onProductClick = {},
-                        modifier = Modifier.padding(innerPadding)
+                        modifier = Modifier.padding(innerPadding),
+                        viewModel = catalogViewModel
                     )
                 }
             }
@@ -270,34 +418,63 @@ fun ProductCatalogContainer(
 ) {
     val selectedProduct = viewModel.selectedProduct
 
-    BackHandler(enabled = selectedProduct != null) {
-        viewModel.onBackClick()
+    BackHandler(
+        enabled = viewModel.showCart || selectedProduct != null
+    ) {
+        if (viewModel.showCart) {
+            viewModel.onCloseCart()
+        } else {
+            viewModel.onBackClick()
+        }
     }
 
-    if (selectedProduct == null) {
-        ProductCatalogScreen(
-            products = viewModel.filteredProducts,
-            categories = viewModel.categories,
-            searchQuery = viewModel.searchQuery,
-            onSearchQueryChange = viewModel::onSearchQueryChange,
-            showOnlyInStock = viewModel.showOnlyInStock,
-            onToggleStockFilter = viewModel::onToggleStockFilter,
-            favoriteProductIds = viewModel.favoriteProductIds,
-            onFavoriteClick = viewModel::onFavoriteClick,
-            onResetFilters = viewModel::onResetFilters,
-            onProductClick = { product ->
-                viewModel.onProductClick(product)
-                onProductClick(product)
-            },
-            modifier = modifier
-        )
-    } else {
-        ProductDetailContainer(
-            product = selectedProduct,
-            onBackClick = viewModel::onBackClick,
-            onAddToCartClick = {},
-            modifier = modifier
-        )
+    when {
+        viewModel.showCart -> {
+            CartScreen(
+                cartItems = viewModel.cartItems,
+                cartTotal = viewModel.cartTotal,
+                cartCount = viewModel.cartCount,
+                onBackClick = viewModel::onCloseCart,
+                onIncreaseQuantity = viewModel::onIncreaseQuantity,
+                onDecreaseQuantity = viewModel::onDecreaseQuantity,
+                onRemoveFromCart = viewModel::onRemoveFromCart,
+                onClearCart = viewModel::onClearCart,
+                modifier = modifier
+            )
+        }
+
+        selectedProduct != null -> {
+            ProductDetailContainer(
+                product = selectedProduct,
+                cartQuantity = viewModel.getCartQuantity(
+                    selectedProduct.id
+                ),
+                onBackClick = viewModel::onBackClick,
+                onAddToCartClick = {
+                    viewModel.onAddToCart(selectedProduct)
+                },
+                modifier = modifier
+            )
+        }
+
+        else -> {
+            ProductCatalogScreen(
+                products = viewModel.filteredProducts,
+                categories = viewModel.categories,
+                searchQuery = viewModel.searchQuery,
+                onSearchQueryChange = viewModel::onSearchQueryChange,
+                showOnlyInStock = viewModel.showOnlyInStock,
+                onToggleStockFilter = viewModel::onToggleStockFilter,
+                favoriteProductIds = viewModel.favoriteProductIds,
+                onFavoriteClick = viewModel::onFavoriteClick,
+                onResetFilters = viewModel::onResetFilters,
+                onProductClick = { product ->
+                    viewModel.onProductClick(product)
+                    onProductClick(product)
+                },
+                modifier = modifier
+            )
+        }
     }
 }
 
@@ -343,16 +520,14 @@ fun ProductCatalogScreen(
                 value = searchQuery,
                 onValueChange = onSearchQueryChange,
                 label = {
-                    Text(text = "Rechercher un produit")
+                    Text("Rechercher un produit")
                 },
                 modifier = Modifier.fillMaxWidth()
             )
         }
 
         item {
-            Button(
-                onClick = onToggleStockFilter
-            ) {
+            Button(onClick = onToggleStockFilter) {
                 Text(
                     text = if (showOnlyInStock) {
                         "Afficher tous les produits"
@@ -402,11 +577,294 @@ fun ProductCatalogScreen(
 }
 
 @Composable
+fun CartScreen(
+    cartItems: List<CartItem>,
+    cartTotal: Double,
+    cartCount: Int,
+    onBackClick: () -> Unit,
+    onIncreaseQuantity: (Int) -> Unit,
+    onDecreaseQuantity: (Int) -> Unit,
+    onRemoveFromCart: (Int) -> Unit,
+    onClearCart: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBackClick) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Retour"
+                )
+            }
+
+            Text(
+                text = "Mon panier",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+        }
+
+        if (cartItems.isEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ShoppingCart,
+                    contentDescription = null,
+                    modifier = Modifier.size(80.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Votre panier est vide",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Ajoutez des produits pour les retrouver ici.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(onClick = onBackClick) {
+                    Text("Continuer mes achats")
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    Text(
+                        text = "$cartCount article(s) dans votre panier",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+
+                items(
+                    items = cartItems,
+                    key = { it.product.id }
+                ) { item ->
+                    CartItemCard(
+                        item = item,
+                        onIncreaseClick = {
+                            onIncreaseQuantity(item.product.id)
+                        },
+                        onDecreaseClick = {
+                            onDecreaseQuantity(item.product.id)
+                        },
+                        onRemoveClick = {
+                            onRemoveFromCart(item.product.id)
+                        }
+                    )
+                }
+            }
+
+            CartTotalSection(
+                cartTotal = cartTotal,
+                onClearCart = onClearCart,
+                onContinueShopping = onBackClick
+            )
+        }
+    }
+}
+
+@Composable
+fun CartItemCard(
+    item: CartItem,
+    onIncreaseClick: () -> Unit,
+    onDecreaseClick: () -> Unit,
+    onRemoveClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ProductImage(
+                    productTitle = item.product.title,
+                    imageRes = item.product.imageRes,
+                    modifier = Modifier.size(90.dp)
+                )
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 12.dp)
+                ) {
+                    Text(
+                        text = item.product.title,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    Text(
+                        text = item.product.brand,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "${formatPrice(item.unitPrice)} / unité",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                IconButton(onClick = onRemoveClick) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Supprimer le produit",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onDecreaseClick) {
+                    Icon(
+                        imageVector = Icons.Default.Remove,
+                        contentDescription = "Diminuer la quantité"
+                    )
+                }
+
+                Text(
+                    text = item.quantity.toString(),
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                IconButton(
+                    onClick = onIncreaseClick,
+                    enabled = item.quantity < item.product.stock
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Augmenter la quantité"
+                    )
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                Text(
+                    text = formatPrice(item.totalPrice),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            if (item.quantity >= item.product.stock) {
+                Text(
+                    text = "Quantité maximale disponible atteinte",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun CartTotalSection(
+    cartTotal: Double,
+    onClearCart: () -> Unit,
+    onContinueShopping: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        tonalElevation = 4.dp,
+        shadowElevation = 4.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Total du panier",
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                Text(
+                    text = formatPrice(cartTotal),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = onContinueShopping,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Continuer mes achats")
+            }
+
+            OutlinedButton(
+                onClick = onClearCart,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = null
+                )
+
+                Text(
+                    text = "Vider le panier",
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun ProductDetailContainer(
     product: ProductUi,
     onBackClick: () -> Unit,
     onAddToCartClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    cartQuantity: Int = 0
 ) {
     Column(
         modifier = modifier
@@ -435,6 +893,7 @@ fun ProductDetailContainer(
 
         ProductDetailScreen(
             product = product,
+            cartQuantity = cartQuantity,
             onAddToCartClick = onAddToCartClick,
             modifier = Modifier.weight(1f)
         )
@@ -485,7 +944,6 @@ fun ProductListItem(
 ) {
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
-
             ProductImage(
                 productTitle = product.title,
                 imageRes = product.imageRes,
@@ -526,7 +984,7 @@ fun ProductListItem(
             }
 
             Button(onClick = onClick) {
-                Text(text = "Voir le produit")
+                Text("Voir le produit")
             }
         }
     }
@@ -634,7 +1092,6 @@ fun FeaturedProductSection(
         tonalElevation = 4.dp
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-
             Text(
                 text = "Produit mis en avant",
                 style = MaterialTheme.typography.titleMedium
@@ -673,7 +1130,7 @@ fun FeaturedProductSection(
             Spacer(modifier = Modifier.height(12.dp))
 
             Button(onClick = onClick) {
-                Text(text = "Voir le produit")
+                Text("Voir le produit")
             }
         }
     }
@@ -756,7 +1213,6 @@ fun DailyOfferBox(
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxWidth()) {
-
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.large,
@@ -798,7 +1254,8 @@ fun DailyOfferBox(
 fun ProductDetailScreen(
     product: ProductUi,
     onAddToCartClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    cartQuantity: Int = 0
 ) {
     Column(
         modifier = modifier
@@ -856,10 +1313,24 @@ fun ProductDetailScreen(
 
         AddToCartButton(
             onClick = onAddToCartClick,
+            stock = product.stock,
+            cartQuantity = cartQuantity,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 16.dp)
         )
+
+        if (cartQuantity > 0) {
+            Text(
+                text = "$cartQuantity article(s) ajouté(s) au panier",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
     }
 }
 
@@ -894,31 +1365,24 @@ fun ProductPriceCard(
     discountPercentage: Double,
     modifier: Modifier = Modifier
 ) {
-    val savings = price * discountPercentage / 100
-    val discountedPrice = price - savings
+    val discountedPrice = (
+            price * (1 - discountPercentage / 100) * 100
+            ).roundToLong() / 100.0
+
+    val savings = price - discountedPrice
 
     Card(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
-
             if (discountPercentage > 0) {
-
                 Text(
-                    text = String.format(
-                        Locale.FRANCE,
-                        "%.2f €",
-                        price
-                    ),
+                    text = formatPrice(price),
                     style = MaterialTheme.typography.bodyMedium,
                     textDecoration = TextDecoration.LineThrough,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 Text(
-                    text = String.format(
-                        Locale.FRANCE,
-                        "%.2f €",
-                        discountedPrice
-                    ),
+                    text = formatPrice(discountedPrice),
                     style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -930,22 +1394,12 @@ fun ProductPriceCard(
                 )
 
                 Text(
-                    text = String.format(
-                        Locale.FRANCE,
-                        "Vous économisez %.2f €",
-                        savings
-                    ),
+                    text = "Vous économisez ${formatPrice(savings)}",
                     style = MaterialTheme.typography.bodyMedium
                 )
-
             } else {
-
                 Text(
-                    text = String.format(
-                        Locale.FRANCE,
-                        "%.2f €",
-                        price
-                    ),
+                    text = formatPrice(price),
                     style = MaterialTheme.typography.headlineSmall
                 )
 
@@ -978,7 +1432,6 @@ fun ProductRating(
     modifier: Modifier = Modifier
 ) {
     Row(modifier = modifier) {
-
         Icon(
             imageVector = Icons.Default.Star,
             contentDescription = "Note du produit"
@@ -999,15 +1452,23 @@ fun ProductAvailabilityCard(
 ) {
     Card(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
-
             Text(
                 text = "Disponibilité",
                 style = MaterialTheme.typography.titleMedium
             )
 
             Text(
-                text = "Stock : $stock unités",
-                style = MaterialTheme.typography.bodyMedium
+                text = if (stock > 0) {
+                    "Stock : $stock unités"
+                } else {
+                    "Rupture de stock"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (stock > 0) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.error
+                }
             )
 
             Text(
@@ -1047,7 +1508,7 @@ fun ProductWarrantyField(
         onValueChange = {},
         readOnly = true,
         label = {
-            Text(text = "Garantie")
+            Text("Garantie")
         },
         modifier = modifier
     )
@@ -1056,13 +1517,28 @@ fun ProductWarrantyField(
 @Composable
 fun AddToCartButton(
     onClick: () -> Unit,
+    stock: Int,
+    cartQuantity: Int,
     modifier: Modifier = Modifier
 ) {
     Button(
         onClick = onClick,
+        enabled = stock > 0 && cartQuantity < stock,
         modifier = modifier
     ) {
-        Text(text = "Ajouter au panier")
+        Icon(
+            imageVector = Icons.Default.ShoppingCart,
+            contentDescription = null
+        )
+
+        Text(
+            text = when {
+                stock == 0 -> "Produit indisponible"
+                cartQuantity >= stock -> "Stock maximum atteint"
+                else -> "Ajouter au panier"
+            },
+            modifier = Modifier.padding(start = 8.dp)
+        )
     }
 }
 
@@ -1071,8 +1547,10 @@ fun PromotionProductCard(
     product: ProductUi,
     modifier: Modifier = Modifier
 ) {
-    val discountedPrice =
-        product.price * (1 - product.discountPercentage / 100)
+    val discountedPrice = (
+            product.price *
+                    (1 - product.discountPercentage / 100) * 100
+            ).roundToLong() / 100.0
 
     Card(modifier = modifier) {
         Column(
@@ -1109,21 +1587,13 @@ fun PromotionProductCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = String.format(
-                    Locale.FRANCE,
-                    "%.2f €",
-                    product.price
-                ),
+                text = formatPrice(product.price),
                 textDecoration = TextDecoration.LineThrough,
                 style = MaterialTheme.typography.bodyMedium
             )
 
             Text(
-                text = String.format(
-                    Locale.FRANCE,
-                    "%.2f €",
-                    discountedPrice
-                ),
+                text = formatPrice(discountedPrice),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -1142,7 +1612,6 @@ fun PromotionsSection(
         .take(2)
 
     Column(modifier = modifier.fillMaxWidth()) {
-
         Text(
             text = "Promotions du moment",
             style = MaterialTheme.typography.titleMedium
@@ -1265,8 +1734,101 @@ fun ProductDetailContainerPreview() {
         ) {
             ProductDetailContainer(
                 product = sampleProduct(),
+                cartQuantity = 2,
                 onBackClick = {},
                 onAddToCartClick = {}
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true, name = "Panier avec produits")
+@Composable
+fun CartScreenPreview() {
+    val items = listOf(
+        CartItem(
+            product = sampleProduct(),
+            quantity = 1
+        ),
+        CartItem(
+            product = sampleProducts()[2],
+            quantity = 2
+        )
+    )
+
+    ProductExplorerTheme(darkTheme = false) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            CartScreen(
+                cartItems = items,
+                cartTotal = items.sumOf {
+                    it.totalPriceInCents
+                } / 100.0,
+                cartCount = items.sumOf {
+                    it.quantity
+                },
+                onBackClick = {},
+                onIncreaseQuantity = {},
+                onDecreaseQuantity = {},
+                onRemoveFromCart = {},
+                onClearCart = {}
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true, name = "Panier vide")
+@Composable
+fun EmptyCartScreenPreview() {
+    ProductExplorerTheme(darkTheme = false) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            CartScreen(
+                cartItems = emptyList(),
+                cartTotal = 0.0,
+                cartCount = 0,
+                onBackClick = {},
+                onIncreaseQuantity = {},
+                onDecreaseQuantity = {},
+                onRemoveFromCart = {},
+                onClearCart = {}
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true, name = "Panier thème sombre")
+@Composable
+fun CartScreenDarkPreview() {
+    val items = listOf(
+        CartItem(
+            product = sampleProduct(),
+            quantity = 2
+        )
+    )
+
+    ProductExplorerTheme(darkTheme = true) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            CartScreen(
+                cartItems = items,
+                cartTotal = items.sumOf {
+                    it.totalPriceInCents
+                } / 100.0,
+                cartCount = items.sumOf {
+                    it.quantity
+                },
+                onBackClick = {},
+                onIncreaseQuantity = {},
+                onDecreaseQuantity = {},
+                onRemoveFromCart = {},
+                onClearCart = {}
             )
         }
     }
@@ -1289,6 +1851,23 @@ fun ThemeSwitchPreview() {
                         Text("Product Explorer")
                     },
                     actions = {
+                        IconButton(
+                            onClick = {}
+                        ) {
+                            BadgedBox(
+                                badge = {
+                                    Badge {
+                                        Text("2")
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ShoppingCart,
+                                    contentDescription = "Panier"
+                                )
+                            }
+                        }
+
                         IconButton(
                             onClick = {
                                 darkTheme = !darkTheme

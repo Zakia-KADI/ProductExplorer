@@ -77,3 +77,19 @@ Cette amélioration permet :
 - De revenir au catalogue grâce à une flèche de retour.
 - De conserver la recherche, les filtres et les favoris
   lors du retour au catalogue.
+
+## TP10 – Gestion d'un écran avec ViewModel
+
+### Partie autonomie : gestion du panier
+
+Les fonctionnalités ajoutées sont :
+
+- Ajout d'un produit au panier depuis sa fiche détaillée.
+- Accès au panier depuis la barre supérieure.
+- Affichage du nombre d'articles sur l'icône du panier.
+- Augmentation et diminution des quantités.
+- Suppression individuelle des produits.
+- Possibilité de vider entièrement le panier.
+- Calcul automatique du total après application des remises.
+- Contrôle des quantités disponibles en stock.
+- Affichage d'un message lorsque le panier est vide.
