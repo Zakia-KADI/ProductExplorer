@@ -93,3 +93,32 @@ Les fonctionnalités ajoutées sont :
 - Calcul automatique du total après application des remises.
 - Contrôle des quantités disponibles en stock.
 - Affichage d'un message lorsque le panier est vide.
+
+## TP11 – Mise à jour dynamique avec StateFlow
+
+### Partie autonomie : filtres et tri dynamique
+
+Les fonctionnalités ajoutées sont :
+
+- Affichage uniquement des produits favoris.
+- Filtrage des produits par catégorie.
+- Sélection de toutes les catégories.
+- Tri des produits par prix croissant.
+- Tri des produits par prix décroissant.
+- Retour à l'ordre de tri par défaut.
+- Combinaison de la recherche avec les différents filtres.
+- Actualisation automatique du nombre de résultats.
+- Réinitialisation de l'ensemble des filtres et du tri.
+- Conservation des favoris lors de la réinitialisation.
+
+### Amélioration graphique des favoris
+
+J'ai remplacé les boutons "Ajouter aux favoris"
+et "Retirer des favoris" par une icône en forme de cœur.
+
+- Un cœur vide indique que le produit n'est pas favori.
+- Un cœur rouge indique que le produit est favori.
+- Un clic sur le cœur ajoute ou retire le produit des favoris.
+
+L'affichage des produits favoris est automatiquement
+actualisé lorsque leur état change.
