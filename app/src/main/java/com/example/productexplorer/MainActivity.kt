@@ -31,6 +31,9 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -44,15 +47,21 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
@@ -62,6 +71,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.productexplorer.ui.theme.ProductExplorerTheme
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.util.Locale
 import kotlin.math.roundToLong
 
@@ -79,6 +92,12 @@ data class ProductUi(
     val shippingInformation: String,
     @DrawableRes val imageRes: Int
 )
+
+enum class SortOrder(val label: String) {
+    DEFAULT("Tri par défaut"),
+    PRICE_ASC("Prix croissant"),
+    PRICE_DESC("Prix décroissant")
+}
 
 data class CartItem(
     val product: ProductUi,
@@ -98,6 +117,34 @@ data class CartItem(
 
     val totalPrice: Double
         get() = totalPriceInCents / 100.0
+}
+
+data class ProductCatalogUiState(
+    val products: List<ProductUi> = emptyList(),
+    val categories: List<String> = emptyList(),
+    val searchQuery: String = "",
+    val showOnlyInStock: Boolean = false,
+    val showOnlyFavorites: Boolean = false,
+    val selectedCategory: String? = null,
+    val sortOrder: SortOrder = SortOrder.DEFAULT,
+    val favoriteProductIds: List<Int> = emptyList(),
+    val selectedProduct: ProductUi? = null,
+    val cartItems: List<CartItem> = emptyList(),
+    val showCart: Boolean = false
+) {
+    val cartCount: Int
+        get() = cartItems.sumOf { it.quantity }
+
+    val cartTotal: Double
+        get() = cartItems.sumOf {
+            it.totalPriceInCents
+        } / 100.0
+
+    fun getCartQuantity(productId: Int): Int {
+        return cartItems.find {
+            it.product.id == productId
+        }?.quantity ?: 0
+    }
 }
 
 fun formatPrice(price: Double): String {
@@ -186,110 +233,195 @@ class ProductCatalogViewModel : ViewModel() {
 
     private val allProducts: List<ProductUi> = sampleProducts()
 
-    val categories: List<String> = sampleCategories()
+    private val allCategories: List<String> = sampleCategories()
 
-    var searchQuery by mutableStateOf("")
-        private set
+    private val _uiState = MutableStateFlow(
+        ProductCatalogUiState(
+            products = allProducts,
+            categories = allCategories
+        )
+    )
 
-    var showOnlyInStock by mutableStateOf(false)
-        private set
+    val uiState: StateFlow<ProductCatalogUiState> =
+        _uiState.asStateFlow()
 
-    var favoriteProductIds by mutableStateOf(listOf<Int>())
-        private set
+    private fun filterProducts(
+        state: ProductCatalogUiState
+    ): List<ProductUi> {
+        val filteredProducts = allProducts.filter { product ->
 
-    var selectedProductId by mutableStateOf<Int?>(null)
-        private set
-
-    var cartItems by mutableStateOf(listOf<CartItem>())
-        private set
-
-    var showCart by mutableStateOf(false)
-        private set
-
-    val cartCount: Int
-        get() = cartItems.sumOf { it.quantity }
-
-    val cartTotal: Double
-        get() = cartItems.sumOf {
-            it.totalPriceInCents
-        } / 100.0
-
-    val selectedProduct: ProductUi?
-        get() = allProducts.find {
-            it.id == selectedProductId
-        }
-
-    val filteredProducts: List<ProductUi>
-        get() = allProducts.filter { product ->
             val matchesSearch =
-                product.title.contains(searchQuery, ignoreCase = true) ||
-                        product.brand.contains(searchQuery, ignoreCase = true) ||
-                        product.category.contains(searchQuery, ignoreCase = true)
+                product.title.contains(
+                    state.searchQuery,
+                    ignoreCase = true
+                ) ||
+                        product.brand.contains(
+                            state.searchQuery,
+                            ignoreCase = true
+                        ) ||
+                        product.category.contains(
+                            state.searchQuery,
+                            ignoreCase = true
+                        )
 
             val matchesStock =
-                !showOnlyInStock || product.stock > 0
+                !state.showOnlyInStock || product.stock > 0
 
-            matchesSearch && matchesStock
+            val matchesFavorites =
+                !state.showOnlyFavorites ||
+                        state.favoriteProductIds.contains(product.id)
+
+            val matchesCategory =
+                state.selectedCategory == null ||
+                        product.category == state.selectedCategory
+
+            matchesSearch &&
+                    matchesStock &&
+                    matchesFavorites &&
+                    matchesCategory
         }
 
+        return when (state.sortOrder) {
+            SortOrder.DEFAULT -> filteredProducts
+
+            SortOrder.PRICE_ASC ->
+                filteredProducts.sortedBy { it.price }
+
+            SortOrder.PRICE_DESC ->
+                filteredProducts.sortedByDescending { it.price }
+        }
+    }
+
+    private fun updateFilteredProducts(
+        transform: (ProductCatalogUiState) -> ProductCatalogUiState
+    ) {
+        _uiState.update { currentState ->
+            val newState = transform(currentState)
+
+            newState.copy(
+                products = filterProducts(newState)
+            )
+        }
+    }
+
     fun onSearchQueryChange(newValue: String) {
-        searchQuery = newValue
+        updateFilteredProducts { currentState ->
+            currentState.copy(
+                searchQuery = newValue
+            )
+        }
     }
 
     fun onToggleStockFilter() {
-        showOnlyInStock = !showOnlyInStock
+        updateFilteredProducts { currentState ->
+            currentState.copy(
+                showOnlyInStock = !currentState.showOnlyInStock
+            )
+        }
+    }
+
+    fun onToggleFavoritesFilter() {
+        updateFilteredProducts { currentState ->
+            currentState.copy(
+                showOnlyFavorites = !currentState.showOnlyFavorites
+            )
+        }
+    }
+
+    fun onCategorySelected(category: String?) {
+        updateFilteredProducts { currentState ->
+            currentState.copy(
+                selectedCategory = category
+            )
+        }
+    }
+
+    fun onSortOrderChange(sortOrder: SortOrder) {
+        updateFilteredProducts { currentState ->
+            currentState.copy(
+                sortOrder = sortOrder
+            )
+        }
     }
 
     fun onFavoriteClick(productId: Int) {
-        favoriteProductIds = if (favoriteProductIds.contains(productId)) {
-            favoriteProductIds - productId
-        } else {
-            favoriteProductIds + productId
+        updateFilteredProducts { currentState ->
+            val newFavoriteIds =
+                if (
+                    currentState.favoriteProductIds.contains(productId)
+                ) {
+                    currentState.favoriteProductIds - productId
+                } else {
+                    currentState.favoriteProductIds + productId
+                }
+
+            currentState.copy(
+                favoriteProductIds = newFavoriteIds
+            )
         }
     }
 
     fun onResetFilters() {
-        searchQuery = ""
-        showOnlyInStock = false
+        updateFilteredProducts { currentState ->
+            currentState.copy(
+                searchQuery = "",
+                showOnlyInStock = false,
+                showOnlyFavorites = false,
+                selectedCategory = null,
+                sortOrder = SortOrder.DEFAULT
+            )
+        }
     }
 
     fun onProductClick(product: ProductUi) {
-        selectedProductId = product.id
+        _uiState.update { currentState ->
+            currentState.copy(
+                selectedProduct = product
+            )
+        }
     }
 
     fun onBackClick() {
-        selectedProductId = null
-    }
-
-    fun getCartQuantity(productId: Int): Int {
-        return cartItems.find {
-            it.product.id == productId
-        }?.quantity ?: 0
+        _uiState.update { currentState ->
+            currentState.copy(
+                selectedProduct = null
+            )
+        }
     }
 
     fun onAddToCart(product: ProductUi) {
-        val currentQuantity = getCartQuantity(product.id)
+        _uiState.update { currentState ->
 
-        if (currentQuantity >= product.stock) {
-            return
-        }
+            val currentQuantity =
+                currentState.getCartQuantity(product.id)
 
-        val existingItem = cartItems.find {
-            it.product.id == product.id
-        }
-
-        cartItems = if (existingItem == null) {
-            cartItems + CartItem(
-                product = product,
-                quantity = 1
-            )
-        } else {
-            cartItems.map { item ->
-                if (item.product.id == product.id) {
-                    item.copy(quantity = item.quantity + 1)
-                } else {
-                    item
+            if (currentQuantity >= product.stock) {
+                currentState
+            } else {
+                val existingItem = currentState.cartItems.find {
+                    it.product.id == product.id
                 }
+
+                val newCartItems = if (existingItem == null) {
+                    currentState.cartItems + CartItem(
+                        product = product,
+                        quantity = 1
+                    )
+                } else {
+                    currentState.cartItems.map { item ->
+                        if (item.product.id == product.id) {
+                            item.copy(
+                                quantity = item.quantity + 1
+                            )
+                        } else {
+                            item
+                        }
+                    }
+                }
+
+                currentState.copy(
+                    cartItems = newCartItems
+                )
             }
         }
     }
@@ -303,39 +435,60 @@ class ProductCatalogViewModel : ViewModel() {
     }
 
     fun onDecreaseQuantity(productId: Int) {
-        val item = cartItems.find {
-            it.product.id == productId
-        } ?: return
+        _uiState.update { currentState ->
 
-        if (item.quantity <= 1) {
-            onRemoveFromCart(productId)
-        } else {
-            cartItems = cartItems.map {
-                if (it.product.id == productId) {
-                    it.copy(quantity = it.quantity - 1)
-                } else {
-                    it
+            val newCartItems = currentState.cartItems
+                .map { item ->
+                    if (item.product.id == productId) {
+                        item.copy(
+                            quantity = item.quantity - 1
+                        )
+                    } else {
+                        item
+                    }
                 }
-            }
+                .filter {
+                    it.quantity > 0
+                }
+
+            currentState.copy(
+                cartItems = newCartItems
+            )
         }
     }
 
     fun onRemoveFromCart(productId: Int) {
-        cartItems = cartItems.filter {
-            it.product.id != productId
+        _uiState.update { currentState ->
+            currentState.copy(
+                cartItems = currentState.cartItems.filter {
+                    it.product.id != productId
+                }
+            )
         }
     }
 
     fun onClearCart() {
-        cartItems = emptyList()
+        _uiState.update { currentState ->
+            currentState.copy(
+                cartItems = emptyList()
+            )
+        }
     }
 
     fun onOpenCart() {
-        showCart = true
+        _uiState.update { currentState ->
+            currentState.copy(
+                showCart = true
+            )
+        }
     }
 
     fun onCloseCart() {
-        showCart = false
+        _uiState.update { currentState ->
+            currentState.copy(
+                showCart = false
+            )
+        }
     }
 }
 
@@ -347,6 +500,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setContent {
+
             val systemDarkTheme = isSystemInDarkTheme()
 
             var darkTheme by rememberSaveable {
@@ -354,6 +508,8 @@ class MainActivity : ComponentActivity() {
             }
 
             val catalogViewModel: ProductCatalogViewModel = viewModel()
+
+            val uiState by catalogViewModel.uiState.collectAsState()
 
             ProductExplorerTheme(darkTheme = darkTheme) {
                 Scaffold(
@@ -369,10 +525,10 @@ class MainActivity : ComponentActivity() {
                                 ) {
                                     BadgedBox(
                                         badge = {
-                                            if (catalogViewModel.cartCount > 0) {
+                                            if (uiState.cartCount > 0) {
                                                 Badge {
                                                     Text(
-                                                        catalogViewModel.cartCount.toString()
+                                                        uiState.cartCount.toString()
                                                     )
                                                 }
                                             }
@@ -416,12 +572,14 @@ fun ProductCatalogContainer(
     modifier: Modifier = Modifier,
     viewModel: ProductCatalogViewModel = viewModel()
 ) {
-    val selectedProduct = viewModel.selectedProduct
+    val uiState by viewModel.uiState.collectAsState()
+
+    val selectedProduct = uiState.selectedProduct
 
     BackHandler(
-        enabled = viewModel.showCart || selectedProduct != null
+        enabled = uiState.showCart || selectedProduct != null
     ) {
-        if (viewModel.showCart) {
+        if (uiState.showCart) {
             viewModel.onCloseCart()
         } else {
             viewModel.onBackClick()
@@ -429,11 +587,11 @@ fun ProductCatalogContainer(
     }
 
     when {
-        viewModel.showCart -> {
+        uiState.showCart -> {
             CartScreen(
-                cartItems = viewModel.cartItems,
-                cartTotal = viewModel.cartTotal,
-                cartCount = viewModel.cartCount,
+                cartItems = uiState.cartItems,
+                cartTotal = uiState.cartTotal,
+                cartCount = uiState.cartCount,
                 onBackClick = viewModel::onCloseCart,
                 onIncreaseQuantity = viewModel::onIncreaseQuantity,
                 onDecreaseQuantity = viewModel::onDecreaseQuantity,
@@ -446,7 +604,7 @@ fun ProductCatalogContainer(
         selectedProduct != null -> {
             ProductDetailContainer(
                 product = selectedProduct,
-                cartQuantity = viewModel.getCartQuantity(
+                cartQuantity = uiState.getCartQuantity(
                     selectedProduct.id
                 ),
                 onBackClick = viewModel::onBackClick,
@@ -459,13 +617,19 @@ fun ProductCatalogContainer(
 
         else -> {
             ProductCatalogScreen(
-                products = viewModel.filteredProducts,
-                categories = viewModel.categories,
-                searchQuery = viewModel.searchQuery,
+                products = uiState.products,
+                categories = uiState.categories,
+                searchQuery = uiState.searchQuery,
                 onSearchQueryChange = viewModel::onSearchQueryChange,
-                showOnlyInStock = viewModel.showOnlyInStock,
+                showOnlyInStock = uiState.showOnlyInStock,
                 onToggleStockFilter = viewModel::onToggleStockFilter,
-                favoriteProductIds = viewModel.favoriteProductIds,
+                showOnlyFavorites = uiState.showOnlyFavorites,
+                onToggleFavoritesFilter = viewModel::onToggleFavoritesFilter,
+                selectedCategory = uiState.selectedCategory,
+                onCategorySelected = viewModel::onCategorySelected,
+                sortOrder = uiState.sortOrder,
+                onSortOrderChange = viewModel::onSortOrderChange,
+                favoriteProductIds = uiState.favoriteProductIds,
                 onFavoriteClick = viewModel::onFavoriteClick,
                 onResetFilters = viewModel::onResetFilters,
                 onProductClick = { product ->
@@ -486,6 +650,12 @@ fun ProductCatalogScreen(
     onSearchQueryChange: (String) -> Unit,
     showOnlyInStock: Boolean,
     onToggleStockFilter: () -> Unit,
+    showOnlyFavorites: Boolean,
+    onToggleFavoritesFilter: () -> Unit,
+    selectedCategory: String?,
+    onCategorySelected: (String?) -> Unit,
+    sortOrder: SortOrder,
+    onSortOrderChange: (SortOrder) -> Unit,
     favoriteProductIds: List<Int>,
     onFavoriteClick: (Int) -> Unit,
     onResetFilters: () -> Unit,
@@ -497,7 +667,7 @@ fun ProductCatalogScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             Text(
@@ -522,32 +692,78 @@ fun ProductCatalogScreen(
                 label = {
                     Text("Rechercher un produit")
                 },
+                singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
         }
 
         item {
-            Button(onClick = onToggleStockFilter) {
-                Text(
-                    text = if (showOnlyInStock) {
-                        "Afficher tous les produits"
-                    } else {
-                        "Afficher uniquement les produits en stock"
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilterChip(
+                    selected = showOnlyInStock,
+                    onClick = onToggleStockFilter,
+                    label = {
+                        Text("En stock")
+                    }
+                )
+
+                FilterChip(
+                    selected = showOnlyFavorites,
+                    onClick = onToggleFavoritesFilter,
+                    label = {
+                        Text("Favoris")
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = if (showOnlyFavorites) {
+                                Icons.Default.Favorite
+                            } else {
+                                Icons.Default.FavoriteBorder
+                            },
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 )
             }
         }
 
         item {
-            CategoryRow(categories = categories)
+            CategoryRow(
+                categories = categories,
+                selectedCategory = selectedCategory,
+                onCategorySelected = onCategorySelected
+            )
         }
 
         item {
-            Text(
-                text = "${products.size} produit(s) affiché(s)",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onBackground
+            SortOrderSelector(
+                sortOrder = sortOrder,
+                onSortOrderChange = onSortOrderChange
             )
+        }
+
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${products.size} produit(s) affiché(s)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.weight(1f)
+                )
+
+                TextButton(onClick = onResetFilters) {
+                    Text("Réinitialiser")
+                }
+            }
         }
 
         if (products.isEmpty()) {
@@ -572,6 +788,247 @@ fun ProductCatalogScreen(
                     }
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun SortOrderSelector(
+    sortOrder: SortOrder,
+    onSortOrderChange: (SortOrder) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    Box(
+        modifier = modifier.fillMaxWidth()
+    ) {
+        OutlinedButton(
+            onClick = {
+                expanded = true
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = sortOrder.label,
+                modifier = Modifier.weight(1f)
+            )
+
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowDown,
+                contentDescription = "Choisir un ordre de tri"
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = {
+                expanded = false
+            }
+        ) {
+            SortOrder.entries.forEach { order ->
+                DropdownMenuItem(
+                    text = {
+                        Text(order.label)
+                    },
+                    onClick = {
+                        onSortOrderChange(order)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun CategoryRow(
+    categories: List<String>,
+    selectedCategory: String?,
+    onCategorySelected: (String?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = "Catégories",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                FilterChip(
+                    selected = selectedCategory == null,
+                    onClick = {
+                        onCategorySelected(null)
+                    },
+                    label = {
+                        Text("Toutes")
+                    }
+                )
+            }
+
+            items(
+                items = categories,
+                key = { it }
+            ) { category ->
+                FilterChip(
+                    selected = selectedCategory == category,
+                    onClick = {
+                        onCategorySelected(category)
+                    },
+                    label = {
+                        Text(category)
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ProductListItem(
+    product: ProductUi,
+    isFavorite: Boolean,
+    onFavoriteClick: () -> Unit,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Box(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                ProductImage(
+                    productTitle = product.title,
+                    imageRes = product.imageRes,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp)
+                )
+
+                IconButton(
+                    onClick = onFavoriteClick,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                ) {
+                    Icon(
+                        imageVector = if (isFavorite) {
+                            Icons.Default.Favorite
+                        } else {
+                            Icons.Default.FavoriteBorder
+                        },
+                        contentDescription = if (isFavorite) {
+                            "Retirer des favoris"
+                        } else {
+                            "Ajouter aux favoris"
+                        },
+                        tint = if (isFavorite) {
+                            Color(0xFFE53935)
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = product.title,
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            Text(
+                text = product.brand,
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = formatPrice(product.price),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Text(
+                    text = "★ ${product.rating}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = if (product.stock > 0) {
+                    "${product.stock} unités en stock"
+                } else {
+                    "Rupture de stock"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (product.stock > 0) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.error
+                }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Button(
+                onClick = onClick,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Voir le produit")
+            }
+        }
+    }
+}
+
+@Composable
+fun EmptyProductsMessage(
+    onResetClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Aucun produit trouvé",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Essayez une autre recherche ou modifiez vos filtres.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(onClick = onResetClick) {
+            Text("Réinitialiser les filtres")
         }
     }
 }
@@ -901,111 +1358,6 @@ fun ProductDetailContainer(
 }
 
 @Composable
-fun EmptyProductsMessage(
-    onResetClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Aucun produit trouvé",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Essayez une autre recherche ou modifiez vos filtres.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(onClick = onResetClick) {
-            Text("Réinitialiser les filtres")
-        }
-    }
-}
-
-@Composable
-fun ProductListItem(
-    product: ProductUi,
-    isFavorite: Boolean,
-    onFavoriteClick: () -> Unit,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(modifier = modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            ProductImage(
-                productTitle = product.title,
-                imageRes = product.imageRes,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text(
-                text = product.title,
-                style = MaterialTheme.typography.titleMedium
-            )
-
-            Text(
-                text = product.brand,
-                style = MaterialTheme.typography.bodyMedium
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "${product.price} € • ★ ${product.rating}",
-                style = MaterialTheme.typography.bodyMedium
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Button(onClick = onFavoriteClick) {
-                Text(
-                    text = if (isFavorite) {
-                        "Retirer des favoris"
-                    } else {
-                        "Ajouter aux favoris"
-                    }
-                )
-            }
-
-            Button(onClick = onClick) {
-                Text("Voir le produit")
-            }
-        }
-    }
-}
-
-@Composable
-fun CategoryRow(
-    categories: List<String>,
-    modifier: Modifier = Modifier
-) {
-    LazyRow(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        items(categories) { category ->
-            CategoryChip(label = category)
-        }
-    }
-}
-
-@Composable
 fun ProductHomeScreen(
     featuredProduct: ProductUi,
     onFeaturedProductClick: () -> Unit,
@@ -1091,7 +1443,9 @@ fun FeaturedProductSection(
         shape = MaterialTheme.shapes.large,
         tonalElevation = 4.dp
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
             Text(
                 text = "Produit mis en avant",
                 style = MaterialTheme.typography.titleMedium
@@ -1143,9 +1497,11 @@ fun ProductQuickInfoRow(
     stock: Int,
     modifier: Modifier = Modifier
 ) {
-    Row(modifier = modifier.fillMaxWidth()) {
+    Row(
+        modifier = modifier.fillMaxWidth()
+    ) {
         Text(
-            text = "$price €",
+            text = formatPrice(price),
             modifier = Modifier.weight(1f)
         )
 
@@ -1194,16 +1550,12 @@ fun CategoriesSection(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        Row {
-            CategoryChip(label = "Smartphones")
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            CategoryChip(label = "Audio")
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            CategoryChip(label = "Maison")
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(sampleCategories()) { category ->
+                CategoryChip(label = category)
+            }
         }
     }
 }
@@ -1212,13 +1564,17 @@ fun CategoriesSection(
 fun DailyOfferBox(
     modifier: Modifier = Modifier
 ) {
-    Box(modifier = modifier.fillMaxWidth()) {
+    Box(
+        modifier = modifier.fillMaxWidth()
+    ) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.large,
             tonalElevation = 2.dp
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
                 Text(
                     text = "Offre du jour",
                     style = MaterialTheme.typography.titleMedium
@@ -1372,7 +1728,9 @@ fun ProductPriceCard(
     val savings = price - discountedPrice
 
     Card(modifier = modifier) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
             if (discountPercentage > 0) {
                 Text(
                     text = formatPrice(price),
@@ -1451,7 +1809,9 @@ fun ProductAvailabilityCard(
     modifier: Modifier = Modifier
 ) {
     Card(modifier = modifier) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
             Text(
                 text = "Disponibilité",
                 style = MaterialTheme.typography.titleMedium
@@ -1611,7 +1971,9 @@ fun PromotionsSection(
         .sortedByDescending { it.discountPercentage }
         .take(2)
 
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(
+        modifier = modifier.fillMaxWidth()
+    ) {
         Text(
             text = "Promotions du moment",
             style = MaterialTheme.typography.titleMedium
@@ -1633,22 +1995,34 @@ fun PromotionsSection(
     }
 }
 
-@Preview(showBackground = true, name = "Thème clair")
 @Composable
-fun ProductCatalogScreenLightPreview() {
-    ProductExplorerTheme(darkTheme = false) {
+fun CatalogPreviewContent(
+    darkTheme: Boolean,
+    products: List<ProductUi> = sampleProducts(),
+    favoriteProductIds: List<Int> = listOf(1),
+    selectedCategory: String? = null,
+    showOnlyFavorites: Boolean = false,
+    sortOrder: SortOrder = SortOrder.DEFAULT
+) {
+    ProductExplorerTheme(darkTheme = darkTheme) {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
             ProductCatalogScreen(
-                products = sampleProducts(),
+                products = products,
                 categories = sampleCategories(),
                 searchQuery = "",
                 onSearchQueryChange = {},
                 showOnlyInStock = false,
                 onToggleStockFilter = {},
-                favoriteProductIds = listOf(1),
+                showOnlyFavorites = showOnlyFavorites,
+                onToggleFavoritesFilter = {},
+                selectedCategory = selectedCategory,
+                onCategorySelected = {},
+                sortOrder = sortOrder,
+                onSortOrderChange = {},
+                favoriteProductIds = favoriteProductIds,
                 onFavoriteClick = {},
                 onResetFilters = {},
                 onProductClick = {}
@@ -1657,28 +2031,68 @@ fun ProductCatalogScreenLightPreview() {
     }
 }
 
-@Preview(showBackground = true, name = "Thème sombre")
+@Preview(showBackground = true, name = "Catalogue - Thème clair")
+@Composable
+fun ProductCatalogScreenLightPreview() {
+    CatalogPreviewContent(
+        darkTheme = false
+    )
+}
+
+@Preview(showBackground = true, name = "Catalogue - Thème sombre")
 @Composable
 fun ProductCatalogScreenDarkPreview() {
-    ProductExplorerTheme(darkTheme = true) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            ProductCatalogScreen(
-                products = sampleProducts(),
-                categories = sampleCategories(),
-                searchQuery = "",
-                onSearchQueryChange = {},
-                showOnlyInStock = false,
-                onToggleStockFilter = {},
-                favoriteProductIds = listOf(1),
-                onFavoriteClick = {},
-                onResetFilters = {},
-                onProductClick = {}
-            )
-        }
-    }
+    CatalogPreviewContent(
+        darkTheme = true
+    )
+}
+
+@Preview(showBackground = true, name = "Filtre catégorie Audio")
+@Composable
+fun CategoryFilterPreview() {
+    CatalogPreviewContent(
+        darkTheme = false,
+        products = sampleProducts().filter {
+            it.category == "Audio"
+        },
+        selectedCategory = "Audio"
+    )
+}
+
+@Preview(showBackground = true, name = "Produits favoris")
+@Composable
+fun FavoritesFilterPreview() {
+    CatalogPreviewContent(
+        darkTheme = false,
+        products = sampleProducts().filter {
+            it.id in listOf(1, 3)
+        },
+        favoriteProductIds = listOf(1, 3),
+        showOnlyFavorites = true
+    )
+}
+
+@Preview(showBackground = true, name = "Tri par prix croissant")
+@Composable
+fun PriceSortPreview() {
+    CatalogPreviewContent(
+        darkTheme = false,
+        products = sampleProducts().sortedBy {
+            it.price
+        },
+        sortOrder = SortOrder.PRICE_ASC
+    )
+}
+
+@Preview(showBackground = true, name = "Aucun résultat")
+@Composable
+fun EmptyProductsPreview() {
+    CatalogPreviewContent(
+        darkTheme = false,
+        products = emptyList(),
+        favoriteProductIds = emptyList(),
+        showOnlyFavorites = true
+    )
 }
 
 @Preview(showBackground = true, name = "Accueil")
@@ -1851,9 +2265,7 @@ fun ThemeSwitchPreview() {
                         Text("Product Explorer")
                     },
                     actions = {
-                        IconButton(
-                            onClick = {}
-                        ) {
+                        IconButton(onClick = {}) {
                             BadgedBox(
                                 badge = {
                                     Badge {
@@ -1889,7 +2301,13 @@ fun ThemeSwitchPreview() {
                 onSearchQueryChange = {},
                 showOnlyInStock = false,
                 onToggleStockFilter = {},
-                favoriteProductIds = emptyList(),
+                showOnlyFavorites = false,
+                onToggleFavoritesFilter = {},
+                selectedCategory = null,
+                onCategorySelected = {},
+                sortOrder = SortOrder.DEFAULT,
+                onSortOrderChange = {},
+                favoriteProductIds = listOf(1),
                 onFavoriteClick = {},
                 onResetFilters = {},
                 onProductClick = {},
