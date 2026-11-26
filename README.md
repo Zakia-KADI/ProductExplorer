@@ -22,3 +22,25 @@ Cette amélioration permet :
 - De mettre le prix après remise.
 - D'afficher le pourcentage de réduction.
 - D'afficher le montant économisé.
+
+### TP5 – Écran d'accueil Product Explorer
+
+#### Fonctionnalité supplémentaire : Promotions du moment
+
+Cette section permet :
+
+- De sélectionner les produits bénéficiant d'une réduction.
+- De trier les produits par pourcentage de remise décroissant.
+- D'afficher le prix initial barré et le prix après réduction.
+- De présenter les produits dans des cartes disposées horizontalement.
+- De permettre le défilement vertical de l'écran d'accueil.
+
+### TP6 – Affichage d'un catalogue local de produits
+
+#### Fonctionnalité supplémentaire : images des produits
+
+Cette amélioration permet :
+
+- D'associer une image locale à chaque produit.
+- D'afficher également les images dans la section promotions.
+- De rendre le catalogue plus visuel et plus agréable à consulter.

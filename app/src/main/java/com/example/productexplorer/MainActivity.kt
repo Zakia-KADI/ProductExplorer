@@ -43,6 +43,11 @@ import com.example.productexplorer.ui.theme.ProductExplorerTheme
 
 import androidx.compose.ui.text.style.TextDecoration
 import java.util.Locale
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+
+import androidx.annotation.DrawableRes
+import androidx.compose.ui.layout.ContentScale
 
 data class ProductUi(
     val id: Int,
@@ -55,9 +60,9 @@ data class ProductUi(
     val rating: Double,
     val stock: Int,
     val warrantyInformation: String,
-    val shippingInformation: String
+    val shippingInformation: String,
+    @DrawableRes val imageRes: Int
 )
-
 fun sampleProduct(): ProductUi {
     return ProductUi(
         id = 1,
@@ -70,7 +75,8 @@ fun sampleProduct(): ProductUi {
         rating = 4.6,
         stock = 34,
         warrantyInformation = "Garantie constructeur : 2 ans",
-        shippingInformation = "Livraison estimée : 3 à 5 jours ouvrés"
+        shippingInformation = "Livraison estimée : 3 à 5 jours ouvrés",
+        imageRes = R.drawable.smartphone
     )
 }
 
@@ -86,7 +92,8 @@ fun sampleProductOutOfStock(): ProductUi {
         rating = 4.2,
         stock = 0,
         warrantyInformation = "Garantie constructeur : 1 an",
-        shippingInformation = "Produit temporairement indisponible"
+        shippingInformation = "Produit temporairement indisponible",
+        imageRes = R.drawable.casque
     )
 }
 
@@ -105,7 +112,8 @@ fun sampleProducts(): List<ProductUi> {
             rating = 4.4,
             stock = 18,
             warrantyInformation = "Garantie constructeur : 2 ans",
-            shippingInformation = "Livraison estimée : 2 à 4 jours ouvrés"
+            shippingInformation = "Livraison estimée : 2 à 4 jours ouvrés",
+            imageRes = R.drawable.montre
         ),
         ProductUi(
             id = 4,
@@ -118,11 +126,11 @@ fun sampleProducts(): List<ProductUi> {
             rating = 4.1,
             stock = 52,
             warrantyInformation = "Garantie constructeur : 1 an",
-            shippingInformation = "Livraison estimée : 3 jours ouvrés"
+            shippingInformation = "Livraison estimée : 3 jours ouvrés",
+            imageRes = R.drawable.enceinte
         )
     )
 }
-
 fun sampleCategories(): List<String> {
     return listOf(
         "Smartphones",
@@ -284,6 +292,16 @@ fun ProductListItem(
 ) {
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
+            ProductImage(
+                productTitle = product.title,
+                imageRes = product.imageRes,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
             Text(
                 text = product.title,
                 style = MaterialTheme.typography.titleMedium
@@ -344,14 +362,12 @@ fun ProductHomeScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
         HomeHeader()
-
         Spacer(modifier = Modifier.height(24.dp))
-
         SearchPreviewBar()
-
         Spacer(modifier = Modifier.height(24.dp))
 
         FeaturedProductSection(
@@ -366,6 +382,12 @@ fun ProductHomeScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         DailyOfferBox()
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        PromotionsSection(
+            products = sampleProducts()
+        )
     }
 }
 
@@ -415,9 +437,21 @@ fun FeaturedProductSection(
         tonalElevation = 4.dp
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
+
             Text(
                 text = "Produit mis en avant",
                 style = MaterialTheme.typography.titleMedium
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // TP6 - Autonomie : image du produit
+            ProductImage(
+                productTitle = product.title,
+                imageRes = product.imageRes,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(140.dp)
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -572,12 +606,15 @@ fun ProductDetailScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
         ProductImage(
             productTitle = product.title,
+            imageRes = product.imageRes,
             modifier = Modifier
                 .fillMaxWidth()
+                .height(180.dp)
                 .padding(bottom = 16.dp)
         )
 
@@ -713,21 +750,19 @@ fun ProductPriceCard(
         }
     }
 }
-
 @Composable
 fun ProductImage(
     productTitle: String,
+    @DrawableRes imageRes: Int,
     modifier: Modifier = Modifier
 ) {
     Image(
-        painter = painterResource(
-            id = android.R.drawable.ic_menu_gallery
-        ),
+        painter = painterResource(id = imageRes),
         contentDescription = "Image du produit $productTitle",
+        contentScale = ContentScale.Fit,
         modifier = modifier
     )
 }
-
 @Composable
 fun ProductRating(
     rating: Double,
@@ -861,5 +896,102 @@ fun ProductDetailScreenOutOfStockPreview() {
             product = sampleProductOutOfStock(),
             onAddToCartClick = {}
         )
+    }
+}
+
+// TP5 - Autonomie
+@Composable
+fun PromotionProductCard(
+    product: ProductUi,
+    modifier: Modifier = Modifier
+) {
+    val discountedPrice =
+        product.price * (1 - product.discountPercentage / 100)
+
+    Card(modifier = modifier) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            ProductImage(
+                productTitle = product.title,
+                imageRes = product.imageRes,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(100.dp)
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "-${product.discountPercentage} %",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = product.title,
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            Text(
+                text = product.brand,
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = String.format(
+                    Locale.FRANCE,
+                    "%.2f €",
+                    product.price
+                ),
+                textDecoration = TextDecoration.LineThrough,
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            Text(
+                text = String.format(
+                    Locale.FRANCE,
+                    "%.2f €",
+                    discountedPrice
+                ),
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+@Composable
+fun PromotionsSection(
+    products: List<ProductUi>,
+    modifier: Modifier = Modifier
+) {
+    val promotedProducts = products
+        .filter { it.discountPercentage > 0 }
+        .sortedByDescending { it.discountPercentage }
+        .take(2)
+
+    Column(modifier = modifier.fillMaxWidth()) {
+
+        Text(
+            text = "Promotions du moment",
+            style = MaterialTheme.typography.titleMedium
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            promotedProducts.forEach { product ->
+                PromotionProductCard(
+                    product = product,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
     }
 }
