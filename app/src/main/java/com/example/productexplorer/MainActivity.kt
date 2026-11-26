@@ -41,6 +41,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.productexplorer.ui.theme.ProductExplorerTheme
 
+import androidx.compose.ui.text.style.TextDecoration
+import java.util.Locale
+
 data class ProductUi(
     val id: Int,
     val title: String,
@@ -651,23 +654,62 @@ fun ProductHeader(
     }
 }
 
+// TP4 - Fonctionnalité supplémentaire
+
 @Composable
 fun ProductPriceCard(
     price: Double,
     discountPercentage: Double,
     modifier: Modifier = Modifier
 ) {
+    val savings = price * discountPercentage / 100
+    val discountedPrice = price - savings
+
     Card(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "$price €",
-                style = MaterialTheme.typography.headlineSmall
-            )
 
-            Text(
-                text = "Remise : $discountPercentage %",
-                style = MaterialTheme.typography.bodyMedium
-            )
+            if (discountPercentage > 0) {
+
+                Text(
+                    text = String.format(Locale.FRANCE, "%.2f €", price),
+                    style = MaterialTheme.typography.bodyMedium,
+                    textDecoration = TextDecoration.LineThrough,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Text(
+                    text = String.format(Locale.FRANCE, "%.2f €", discountedPrice),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Text(
+                    text = "Remise : $discountPercentage %",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Text(
+                    text = String.format(
+                        Locale.FRANCE,
+                        "Vous économisez %.2f €",
+                        savings
+                    ),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+
+            } else {
+
+                Text(
+                    text = String.format(Locale.FRANCE, "%.2f €", price),
+                    style = MaterialTheme.typography.headlineSmall
+                )
+
+                Text(
+                    text = "Aucune remise",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
         }
     }
 }
